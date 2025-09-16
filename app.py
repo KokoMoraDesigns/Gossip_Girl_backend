@@ -1,10 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 import mysql.connector
 from mysql.connector import Error
 from flask_cors import CORS
 
+
+
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app, 
+    supports_credentials=True,
+    origins=['http://localhost:3001'])
+
+app.secret_key = 'hudcfijefv4567'
 
 
 
@@ -33,11 +40,56 @@ def create_connection():
 connection = create_connection()
 cursor = connection.cursor(dictionary=True)
 
+
 @app.route('/')
 def hello_world():
     return 'Te amo, mi Amatxito maravillosísima'
 
-@app.route('/users', methods=['GET'])
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    name = data.get('users_name')
+    email = data.get('users_email')
+    password = data.get('users_password')
+
+    if not name or not email or not password:
+        return jsonify({"message": "Faltan datos"}), 400
+    
+    try:
+        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
+        return jsonify({"message": "Usuario registrado con éxito"}), 201
+    except mysql.connector.Error as err:
+        return jsonify({"message": f"Error: {err}"}), 400
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    cursor.execute('SELECT * FROM users WHERE users_email=%s AND users_password=%s', (email, password))
+    user = cursor.fetchone()
+
+    if user:
+        session['user_id'] = user['users_id']
+        return jsonify({"message": "Login exitoso", "user": user}), 200
+    else:
+        return jsonify({"message": "Credenciales incorrectas"}), 401
+    
+
+@app.route('/check_session', methods=['GET'])
+def check_session():
+    if 'user_id' in session:
+        return jsonify({'logged_in': True, 'user_id': session['user_id']})
+    return jsonify({'logged_in': False})
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.pop('user_id', None)
+    return jsonify({'message': 'sesión cerrada'}), 200
+
+@app.route('/api/users', methods=['GET'])
 def get_users():
     try:
         cursor.execute('SELECT * FROM users')
@@ -46,6 +98,8 @@ def get_users():
     
     except Error as e:
         return jsonify({'error': str(e)})
+    
+
 
 
 @app.route('/users', methods=['POST'])
@@ -57,6 +111,7 @@ def add_user():
         return jsonify({'id': cursor.lastrowid})
     except Error as e:
         return jsonify({'error': str(e)})
+    
 
 @app.route('/users/<int:id>', methods=['PUT'])
 def update_user(id):
@@ -78,7 +133,7 @@ def delete_user(id):
         return jsonify({'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(port=5005, debug=True)
+    app.run(host='localhost', port=5005, debug=True)
 
 @app.teardown_appcontext
 def close_connection(exception):
