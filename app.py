@@ -2,10 +2,13 @@ from flask import Flask, request, jsonify, session
 import mysql.connector
 from mysql.connector import Error
 from flask_cors import CORS
+import os
 
 
 
 app = Flask(__name__)
+UPLOAD_FOLDER = 'static/images'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(
     app, 
     supports_credentials=True,
@@ -45,21 +48,6 @@ cursor = connection.cursor(dictionary=True)
 def hello_world():
     return 'Te amo, mi Amatxito maravillosísima'
 
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    name = data.get('users_name')
-    email = data.get('users_email')
-    password = data.get('users_password')
-
-    if not name or not email or not password:
-        return jsonify({"message": "Faltan datos"}), 400
-    
-    try:
-        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
-        return jsonify({"message": "Usuario registrado con éxito"}), 201
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error: {err}"}), 400
 
 
 @app.route('/login', methods=['POST'])
@@ -78,16 +66,55 @@ def login():
         return jsonify({"message": "Credenciales incorrectas"}), 401
     
 
+
+
 @app.route('/check_session', methods=['GET'])
 def check_session():
     if 'user_id' in session:
         return jsonify({'logged_in': True, 'user_id': session['user_id']})
     return jsonify({'logged_in': False})
 
+
+
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)
     return jsonify({'message': 'sesión cerrada'}), 200
+
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'no file part'})
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'no selected file'})
+    
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    file.save(filepath)
+
+    image_url = f'/{filepath}'
+
+    return jsonify({'url': image_url})
+
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    name = data.get('users_name')
+    email = data.get('users_email')
+    password = data.get('users_password')
+
+    if not name or not email or not password:
+        return jsonify({"message": "Faltan datos"}), 400
+    
+    try:
+        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
+        return jsonify({"message": "Usuario registrado con éxito"}), 201
+    except mysql.connector.Error as err:
+        return jsonify({"message": f"Error: {err}"}), 400
+
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
