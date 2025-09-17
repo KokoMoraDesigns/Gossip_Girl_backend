@@ -6,8 +6,10 @@ import os
 
 
 
+
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/images'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(
     app, 
@@ -50,6 +52,10 @@ def hello_world():
 
 
 
+
+
+
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
@@ -68,6 +74,10 @@ def login():
 
 
 
+
+
+
+
 @app.route('/check_session', methods=['GET'])
 def check_session():
     if 'user_id' in session:
@@ -76,10 +86,61 @@ def check_session():
 
 
 
+
+
+
+
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)
     return jsonify({'message': 'sesión cerrada'}), 200
+
+
+
+
+
+@app.route('/create_news', methods=['POST'])
+def create_news():
+    if 'users_id' not in session:
+        return jsonify({'error': 'Acceso no autorizado'}), 401
+    
+    users_id = session['users_id']
+    title = request.form['title']
+    content = request.form['content']
+    category = request.form['category']
+    cover_image = None
+
+    if 'cover' in request.files:
+        file = request.files['cover']
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        file.save(filepath)
+        cover_image = f'/{filepath}'
+
+    cursor = mysql.connection.cursor()
+    cursor.execute("INSERT INTO news (news_users_id, news_title, news_content, news_category, news_cover_image) VALUES (%s, %s, %s, %s, %s)",
+                   (users_id, title, content, category, cover_image))
+
+    mysql.connection.commit()
+    return jsonify({'msg': 'La nueva noticia ha sido creada'})
+
+
+@app.route('upload_news_image/<int:news_id>', methods=['POST'])
+def upload_news_image(news_id):
+    if 'users_id' not in session:
+        return jsonify({'error': 'Acceso no autorizado'}), 401
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file'})
+    
+    file = request.files['file']
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    file.save(filepath)
+    news_images = f'/{filepath}'
+
+    cursor = mysql.connection.cursor()
+    cursor.execute('INSERT INTO news_images (news_id, news_images) VALUES (%s, %s)', (news_id, news_images))
+    mysql.connection.commit()
+    return jsonify({'url': news_images})
 
 
 
