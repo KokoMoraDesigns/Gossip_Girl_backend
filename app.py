@@ -116,15 +116,19 @@ def create_news():
         file.save(filepath)
         cover_image = f'/{filepath}'
 
-    cursor = mysql.connection.cursor()
+    cursor = connection.cursor()
     cursor.execute("INSERT INTO news (news_users_id, news_title, news_content, news_category, news_cover_image) VALUES (%s, %s, %s, %s, %s)",
                    (users_id, title, content, category, cover_image))
 
-    mysql.connection.commit()
+    connection.commit()
     return jsonify({'msg': 'La nueva noticia ha sido creada'})
 
 
-@app.route('upload_news_image/<int:news_id>', methods=['POST'])
+
+
+
+
+@app.route('/upload_news_image/<int:news_id>', methods=['POST'])
 def upload_news_image(news_id):
     if 'users_id' not in session:
         return jsonify({'error': 'Acceso no autorizado'}), 401
@@ -137,10 +141,14 @@ def upload_news_image(news_id):
     file.save(filepath)
     news_images = f'/{filepath}'
 
-    cursor = mysql.connection.cursor()
+    cursor = connection.cursor()
     cursor.execute('INSERT INTO news_images (news_id, news_images) VALUES (%s, %s)', (news_id, news_images))
-    mysql.connection.commit()
+    connection.commit()
     return jsonify({'url': news_images})
+
+
+
+
 
 
 
@@ -158,6 +166,17 @@ def upload_file():
     image_url = f'/{filepath}'
 
     return jsonify({'url': image_url})
+
+
+
+
+@app.route('/get_news', methods=['GET'])
+def get_news():
+    cursor = connection.cursor(dictionary=True)
+    cursor.execute('SELECT n.news_id, n.news_title, n.news_content, n.news_cover_image, n.news_category, n.created_at, n.updated_at, u.users_name FROM news n JOIN users u ON n.news_users_id = u.users_id ORDER BY n.created_at DESC')
+
+    news = cursor.fetchall()
+    return jsonify(news)
 
 
 @app.route("/register", methods=["POST"])
