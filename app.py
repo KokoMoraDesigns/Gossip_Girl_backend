@@ -172,11 +172,29 @@ def upload_file():
 
 @app.route('/get_news', methods=['GET'])
 def get_news():
-    cursor = connection.cursor(dictionary=True)
+    
     cursor.execute('SELECT n.news_id, n.news_title, n.news_content, n.news_cover_image, n.news_category, n.created_at, n.updated_at, u.users_name FROM news n JOIN users u ON n.news_users_id = u.users_id ORDER BY n.created_at DESC')
 
     news = cursor.fetchall()
     return jsonify(news)
+
+
+
+
+@app.route('/get_news/<int:news_id>', methods=['GET'])
+def get_news_item(news_id):
+    
+    cursor.execute('SELECT n.news_id, n.news_title, n.news_content, n.news_cover_image, n.news_category, n.created_at, n.updated_at, u.users_name FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s', (news_id,))
+    news_item = cursor.fetchone()
+
+    if not news_item:
+        return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
+    
+    return jsonify(news_item)
+
+
+
+
 
 
 @app.route("/register", methods=["POST"])
