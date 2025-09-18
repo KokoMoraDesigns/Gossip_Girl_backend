@@ -14,7 +14,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(
     app, 
     supports_credentials=True,
-    origins=['http://localhost:3001'])
+    origins=['http://localhost:3001']
+    )
 
 app.secret_key = 'hudcfijefv4567'
 
@@ -172,11 +173,38 @@ def upload_file():
 
 @app.route('/get_news', methods=['GET'])
 def get_news():
-    
-    cursor.execute('SELECT n.news_id, n.news_title, n.news_content, n.news_cover_image, n.news_category, n.created_at, n.updated_at, u.users_name FROM news n JOIN users u ON n.news_users_id = u.users_id ORDER BY n.created_at DESC')
 
-    news = cursor.fetchall()
-    return jsonify(news)
+    try:
+
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = """
+            SELECT 
+                news_id AS id,
+                news_title AS title,
+                news_content AS content,
+                news_cover_image AS cover_image,
+                news_category AS category,
+                news_users_id AS user_id,
+                created_at,
+                updated_at
+            FROM news
+            ORDER BY created_at DESC
+        """
+        
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'newspaper_items': rows})
+    
+    except Exception as e:
+        print('error in get_news:', e)
+        return jsonify({'error': str(e)}), 500
+
 
 
 
