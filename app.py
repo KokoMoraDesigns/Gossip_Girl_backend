@@ -211,16 +211,79 @@ def add_new():
         cursor.execute(query, (title, content, cover_image, category, images, user_id))
         connection.commit()
 
-        new_id = cursor.lastrowid
+        news_id = cursor.lastrowid
 
         cursor.close()
         connection.close()
 
-        return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': new_id }), 201
+        return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': news_id }), 201
     
     except Exception as e:
         print('error in add_new:', e)
         return jsonify({'error': str(e)}), 500
+    
+
+
+@app.route('/update_news/<int:news_id>', methods=['PUT'])
+def update_news(news_id):
+    try:
+        data = request.get_json()
+
+        title = data.get('title')
+        content = data.get('content')
+        cover_image = data.get('cover_image')
+        category = data.get('category')
+        images = data.get('images')
+
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = '''
+            UPDATE news
+            SET news_title = %s,
+                news_content = %s,
+                news_cover_image = %s,
+                news_category = %s,
+                news_images = %s,
+                updated_at = NOW()
+            WHERE news_id = %s
+        '''
+
+        cursor.execute(query, (title, content, cover_image, category, images, news_id))
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'message': 'la noticia se ha actualizado exitosamente'}), 200
+    
+    except Exception as e:
+        print('error in update_news:', e)
+        return jsonify({'error': str(e)}), 500
+    
+
+
+@app.route('/delete_news/<int:news_id>', methods=['DELETE'])
+def delete_news(news_id):
+    try:
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = 'DELETE FROM news WHERE news_id = %s'
+        cursor.execute(query, (news_id,))
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'message': 'la noticia se ha eliminado con éxito'}), 200
+    except Exception as e:
+        print('error in delete_news:', e)
+        return jsonify({'error': str(e)}), 500
+
+
+
+
 
 
 
