@@ -3,14 +3,25 @@ import mysql.connector
 from mysql.connector import Error
 from flask_cors import CORS
 import os
+from werkzeug.utils import secure_filename
 
 
 
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'static/images'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+
+UPLOAD_FOLDER = os.path.join(os.getcwd(), 'static', 'images')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1) [1].lower() in ALLOWED_EXTENSIONS
+
 CORS(
     app, 
     supports_credentials=True,
@@ -194,29 +205,37 @@ def add_new():
 
         title = data.get('title')
         content = data.get('content')
-        cover_image = data.get('cover_image')
         category = data.get('category')
-        images = data.get('images')
         user_id = data.get('user_id')
+
+        cover_image_url = None
+
+        if 'cover_image' in request.files:
+            file = request.files['cover_image']
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                cover_image_url = f'/static/images/{filename}'
 
         connection = create_connection()
         cursor = connection.cursor(dictionary=True)
 
         query = '''
 
-            INSERT INTO news (news_title, news_content, news_cover_images, news_category, news_images, news_users_id, created_at, updated_at)
+            INSERT INTO news (news_title, news_content, news_cover_image, news_category, news_images, news_users_id, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
         '''
 
-        cursor.execute(query, (title, content, cover_image, category, images, user_id))
+        cursor.execute(query, (title, content, cover_image_url, category, user_id))
         connection.commit()
 
-        news_id = cursor.lastrowid
+        new_id = cursor.lastrowid
 
         cursor.close()
         connection.close()
 
-        return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': news_id }), 201
+        return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': new_id }), 201
     
     except Exception as e:
         print('error in add_new:', e)
@@ -231,9 +250,17 @@ def update_news(news_id):
 
         title = data.get('title')
         content = data.get('content')
-        cover_image = data.get('cover_image')
         category = data.get('category')
-        images = data.get('images')
+
+        cover_image_url = None
+        if 'cover_image' in request.files:
+            file = request.files['cover_image']
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                cover_image_url = f'/static/images/{filename}'
+
 
         connection = create_connection()
         cursor = connection.cursor(dictionary=True)
@@ -242,16 +269,22 @@ def update_news(news_id):
             UPDATE news
             SET news_title = %s,
                 news_content = %s,
-                news_cover_image = %s,
                 news_category = %s,
-                news_images = %s,
                 updated_at = NOW()
             WHERE news_id = %s
         '''
 
-        cursor.execute(query, (title, content, cover_image, category, images, news_id))
-        connection.commit()
+        values = (title, content, category, news_id)
+        cursor.execute(query, values)
 
+
+
+        if cover_image_url:
+            cursor.execute(
+                'UPDATE news SET news_cover_image = %s WHERE news_id = %s', (cover_image_url, news_id)
+            )
+        
+        connection.commit()
         cursor.close()
         connection.close()
 
@@ -280,6 +313,12 @@ def delete_news(news_id):
     except Exception as e:
         print('error in delete_news:', e)
         return jsonify({'error': str(e)}), 500
+    
+
+
+
+
+
 
 
 
