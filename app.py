@@ -100,6 +100,197 @@ def logout():
 
 
 
+
+@app.route('/get_news', methods=['GET'])
+def get_news():
+
+    try:
+
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = """
+            SELECT 
+                news_id AS id,
+                news_title AS title,
+                news_content AS content,
+                news_cover_image AS cover_image,
+                news_category AS category,
+                news_users_id AS user_id,
+                created_at,
+                updated_at
+            FROM news
+            ORDER BY news_id DESC
+        """
+        
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'newspaper_items': rows})
+    
+    except Exception as e:
+        print('error in get_news:', e)
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/get_news/<category>', methods=['GET'])
+def get_news_by_category(category):
+    try:
+
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+    
+        query = """
+            SELECT 
+                news_id AS id,
+                news_title AS title,
+                news_content AS content,
+                news_cover_image AS cover_image,
+                news_category AS category,
+                news_users_id AS user_id,
+                created_at,
+                updated_at
+            FROM news
+            WHERE news_category = %s
+            ORDER BY news_id DESC
+        """
+        cursor.execute(query, (category,))
+        rows = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'newspaper_items': rows})
+    
+    except Exception as e:
+        print('error in get_news_by_category:', e)
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+
+@app.route('/get_news/<int:news_id>', methods=['GET'])
+def get_news_item(news_id):
+    
+    cursor.execute('SELECT n.news_id AS id, n.news_title AS title, n.news_content AS content, n.news_cover_image AS cover_image, n.news_category AS category, n.created_at AS created_at, n.updated_at AS updated_at, u.users_name AS name FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s', (news_id,))
+    news_item = cursor.fetchone()
+
+    if not news_item:
+        return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
+    
+    return jsonify(news_item)
+
+
+
+@app.route('/add_new', methods=['POST'])
+def add_new():
+    try:
+        data = request.get_json()
+
+        title = data.get('title')
+        content = data.get('content')
+        cover_image = data.get('cover_image')
+        category = data.get('category')
+        images = data.get('images')
+        user_id = data.get('user_id')
+
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        query = '''
+
+            INSERT INTO news (news_title, news_content, news_cover_images, news_category, news_images, news_users_id, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+        '''
+
+        cursor.execute(query, (title, content, cover_image, category, images, user_id))
+        connection.commit()
+
+        new_id = cursor.lastrowid
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': new_id }), 201
+    
+    except Exception as e:
+        print('error in add_new:', e)
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    name = data.get('users_name')
+    email = data.get('users_email')
+    password = data.get('users_password')
+
+    if not name or not email or not password:
+        return jsonify({"message": "Faltan datos"}), 400
+    
+    try:
+        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
+        return jsonify({"message": "Usuario registrado con éxito"}), 201
+    except mysql.connector.Error as err:
+        return jsonify({"message": f"Error: {err}"}), 400
+
+
+@app.route('/api/users', methods=['GET'])
+def get_users():
+    try:
+        cursor.execute('SELECT * FROM users')
+        users = cursor.fetchall()
+        return jsonify(users)
+    
+    except Error as e:
+        return jsonify({'error': str(e)})
+    
+
+
+
+@app.route('/users', methods=['POST'])
+def add_user():
+    try:
+        user = request.json
+        cursor.execute('INSERT INTO users (name, password) VALUES (%s, %s)', (user['name'], user['password']))
+        connection.commit()
+        return jsonify({'id': cursor.lastrowid})
+    except Error as e:
+        return jsonify({'error': str(e)})
+    
+
+@app.route('/users/<int:id>', methods=['PUT'])
+def update_user(id):
+    try:
+        user = request.json
+        cursor.execute('UPDATE users SET name = %s, password = %s WHERE id = %s', (user['name'], user['password'], id))
+        connection.commit()
+        return 'User updated'
+    except Error as e:
+        return jsonify({'error': str(e)})
+    
+@app.route('/users/<int:id>', methods=['DELETE'])
+def delete_user(id):
+    try:
+        cursor.execute('DELETE FROM users WHERE id = %s', (id,))
+        connection.commit()
+        return 'User deleted'
+    except Error as e:
+        return jsonify({'error': str(e)})
+    
+
+
+
+
 @app.route('/create_news', methods=['POST'])
 def create_news():
     if 'users_id' not in session:
@@ -170,123 +361,10 @@ def upload_file():
 
 
 
-
-@app.route('/get_news', methods=['GET'])
-def get_news():
-
-    try:
-
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        query = """
-            SELECT 
-                news_id AS id,
-                news_title AS title,
-                news_content AS content,
-                news_cover_image AS cover_image,
-                news_category AS category,
-                news_users_id AS user_id,
-                created_at,
-                updated_at
-            FROM news
-            ORDER BY created_at DESC
-        """
-        
-        cursor.execute(query)
-        rows = cursor.fetchall()
-
-        cursor.close()
-        connection.close()
-
-        return jsonify({'newspaper_items': rows})
-    
-    except Exception as e:
-        print('error in get_news:', e)
-        return jsonify({'error': str(e)}), 500
-
-
-
-
-
-@app.route('/get_news/<int:news_id>', methods=['GET'])
-def get_news_item(news_id):
-    
-    cursor.execute('SELECT n.news_id, n.news_title, n.news_content, n.news_cover_image, n.news_category, n.created_at, n.updated_at, u.users_name FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s', (news_id,))
-    news_item = cursor.fetchone()
-
-    if not news_item:
-        return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
-    
-    return jsonify(news_item)
-
-
-
-
-
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    name = data.get('users_name')
-    email = data.get('users_email')
-    password = data.get('users_password')
-
-    if not name or not email or not password:
-        return jsonify({"message": "Faltan datos"}), 400
-    
-    try:
-        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
-        return jsonify({"message": "Usuario registrado con éxito"}), 201
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error: {err}"}), 400
-
-
-@app.route('/api/users', methods=['GET'])
-def get_users():
-    try:
-        cursor.execute('SELECT * FROM users')
-        users = cursor.fetchall()
-        return jsonify(users)
-    
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-
-
-
-@app.route('/users', methods=['POST'])
-def add_user():
-    try:
-        user = request.json
-        cursor.execute('INSERT INTO users (name, password) VALUES (%s, %s)', (user['name'], user['password']))
-        connection.commit()
-        return jsonify({'id': cursor.lastrowid})
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-
-@app.route('/users/<int:id>', methods=['PUT'])
-def update_user(id):
-    try:
-        user = request.json
-        cursor.execute('UPDATE users SET name = %s, password = %s WHERE id = %s', (user['name'], user['password'], id))
-        connection.commit()
-        return 'User updated'
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-@app.route('/users/<int:id>', methods=['DELETE'])
-def delete_user(id):
-    try:
-        cursor.execute('DELETE FROM users WHERE id = %s', (id,))
-        connection.commit()
-        return 'User deleted'
-    except Error as e:
-        return jsonify({'error': str(e)})
-
 if __name__ == '__main__':
     app.run(host='localhost', port=5005, debug=True)
+
+
 
 @app.teardown_appcontext
 def close_connection(exception):
