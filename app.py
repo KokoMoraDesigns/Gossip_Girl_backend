@@ -4,11 +4,17 @@ from mysql.connector import Error
 from flask_cors import CORS
 import os
 from werkzeug.utils import secure_filename
+import json
 
 
 
 
 app = Flask(__name__)
+CORS(
+    app, 
+    supports_credentials=True,
+    origins=['http://localhost:3001']
+)
 
 
 
@@ -22,11 +28,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1) [1].lower() in ALLOWED_EXTENSIONS
 
-CORS(
-    app, 
-    supports_credentials=True,
-    origins=['http://localhost:3001']
-    )
+
 
 app.secret_key = 'hudcfijefv4567'
 
@@ -61,10 +63,6 @@ cursor = connection.cursor(dictionary=True)
 @app.route('/')
 def hello_world():
     return 'Te amo, mi Amatxito maravillosísima'
-
-
-
-
 
 
 
@@ -121,24 +119,33 @@ def get_news():
         cursor = connection.cursor(dictionary=True)
 
         query = """
-            SELECT 
+            SELECT
                 news_id AS id,
                 news_title AS title,
                 news_content AS content,
                 news_cover_image AS cover_image,
                 news_category AS category,
                 news_users_id AS user_id,
+                news_images,
                 created_at,
                 updated_at
             FROM news
             ORDER BY news_id DESC
         """
-        
         cursor.execute(query)
         rows = cursor.fetchall()
-
         cursor.close()
         connection.close()
+
+        for row in rows:
+            if row['news_images']:
+                try:
+                    row['news_images'] = json.loads(row['news_images'])
+                except:
+                    row['news_images'] = []
+            else:
+                row['news_images'] = []
+
 
         return jsonify({'newspaper_items': rows})
     
@@ -163,6 +170,7 @@ def get_news_by_category(category):
                 news_cover_image AS cover_image,
                 news_category AS category,
                 news_users_id AS user_id,
+                news_images,
                 created_at,
                 updated_at
             FROM news
@@ -171,9 +179,17 @@ def get_news_by_category(category):
         """
         cursor.execute(query, (category,))
         rows = cursor.fetchall()
-
         cursor.close()
         connection.close()
+
+        for row in rows:
+            if row['news_images']:
+                try:
+                    row['news_images'] = json.loads(row['news_images'])
+                except:
+                    row['news_images'] = []
+            else:
+                row['news_images'] = []        
 
         return jsonify({'newspaper_items': rows})
     
@@ -187,19 +203,39 @@ def get_news_by_category(category):
 
 @app.route('/get_news/<int:news_id>', methods=['GET'])
 def get_news_item(news_id):
+
+    try: 
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
     
-    cursor.execute('SELECT n.news_id AS id, n.news_title AS title, n.news_content AS content, n.news_cover_image AS cover_image, n.news_category AS category, n.created_at AS created_at, n.updated_at AS updated_at, u.users_name AS name FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s', (news_id,))
-    news_item = cursor.fetchone()
+        query = 'SELECT n.news_id AS id, n.news_title AS title, n.news_content AS content, n.news_cover_image AS cover_image, n.news_category AS category, n.created_at AS created_at, n.updated_at AS updated_at, n.news_images, u.users_name AS author FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s'
+        cursor.execute(query, (news_id,))
+        news_item = cursor.fetchone()
 
-    if not news_item:
-        return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
+        cursor.close()
+        connection.close()
+
+        if not news_item:
+            return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
+        
+        if news_item['news_images']:
+            try:
+                news_item['news_images'] = json.loads(news_item['news_images'])
+            except:
+                news_item['news_images'] = []
+        else:
+            news_item['news_images'] = []
+        
+        return jsonify(news_item)
     
-    return jsonify(news_item)
+    except Exception as e:
+        print('error in get_news_item:', e)
+        return jsonify({'error': str(e)}), 500
 
 
 
-@app.route('/add_new', methods=['POST'])
-def add_new():
+@app.route('/add_news', methods=['POST'])
+def add_news():
     try:
         data = request.get_json()
 
@@ -207,6 +243,7 @@ def add_new():
         content = data.get('content')
         category = data.get('category')
         user_id = data.get('user_id')
+
 
         cover_image_url = None
 
@@ -218,16 +255,31 @@ def add_new():
                 file.save(filepath)
                 cover_image_url = f'/static/images/{filename}'
 
+
+
+            
+        extra_images = []
+        if 'news_images' in request.files:
+            files = request.files.getlist('news_images')
+            for file in files:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    extra_images.append(f'/static/images/{filename}')
+
+        images_str = json.dumps(extra_images) if extra_images else None
+
         connection = create_connection()
         cursor = connection.cursor(dictionary=True)
 
         query = '''
 
-            INSERT INTO news (news_title, news_content, news_cover_image, news_category, news_images, news_users_id, created_at, updated_at)
+            INSERT INTO news (news_title, news_content, news_cover_image, news_category, news_users_id, news_images, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
         '''
 
-        cursor.execute(query, (title, content, cover_image_url, category, user_id))
+        cursor.execute(query, (title, content, cover_image_url, category, user_id, images_str))
         connection.commit()
 
         new_id = cursor.lastrowid
@@ -246,11 +298,10 @@ def add_new():
 @app.route('/update_news/<int:news_id>', methods=['PUT'])
 def update_news(news_id):
     try:
-        data = request.get_json()
 
-        title = data.get('title')
-        content = data.get('content')
-        category = data.get('category')
+        title = request.form.get('title')
+        content = request.form.get('content')
+        category = request.form.get('category')
 
         cover_image_url = None
         if 'cover_image' in request.files:
@@ -260,6 +311,19 @@ def update_news(news_id):
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(filepath)
                 cover_image_url = f'/static/images/{filename}'
+
+
+        extra_images = []
+        if 'news_images' in request.files:
+            files = request.files.getlist('news_images')
+            for file in files:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    extra_images.append(f'/static/images/{filename}')
+
+        images_str = json.dumps(extra_images) if extra_images else None
 
 
         connection = create_connection()
@@ -274,15 +338,15 @@ def update_news(news_id):
             WHERE news_id = %s
         '''
 
-        values = (title, content, category, news_id)
-        cursor.execute(query, values)
-
-
+        cursor.execute(query, (title, content, category, news_id))
 
         if cover_image_url:
             cursor.execute(
                 'UPDATE news SET news_cover_image = %s WHERE news_id = %s', (cover_image_url, news_id)
             )
+
+        if images_str:
+            cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
         
         connection.commit()
         cursor.close()
