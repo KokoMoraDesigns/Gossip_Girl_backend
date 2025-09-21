@@ -221,12 +221,16 @@ def get_news_item(news_id):
         if news_item['news_images']:
             try:
                 news_item['news_images'] = json.loads(news_item['news_images'])
+                
             except:
                 news_item['news_images'] = []
         else:
             news_item['news_images'] = []
+
+        print("📦 noticia enviada:", news_item)
         
         return jsonify(news_item)
+        
     
     except Exception as e:
         print('error in get_news_item:', e)
@@ -237,12 +241,10 @@ def get_news_item(news_id):
 @app.route('/add_news', methods=['POST'])
 def add_news():
     try:
-        data = request.get_json()
-
-        title = data.get('title')
-        content = data.get('content')
-        category = data.get('category')
-        user_id = data.get('user_id')
+        title = request.form.get('title')
+        content = request.form.get('content')
+        category = request.form.get('category')
+        user_id = request.form.get('user_id')
 
 
         cover_image_url = None
@@ -313,7 +315,20 @@ def update_news(news_id):
                 cover_image_url = f'/static/images/{filename}'
 
 
-        extra_images = []
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute('SELECT news_images FROM news WHERE news_id = %s', (news_id,))
+        row = cursor.fetchone()
+
+        existing_images = []
+        if row and row['news_images']:
+            try:
+                existing_images = json.loads(row['news_images'])
+            except:
+                existing_images = []
+
+
+        new_images = []
         if 'news_images' in request.files:
             files = request.files.getlist('news_images')
             for file in files:
@@ -321,13 +336,12 @@ def update_news(news_id):
                     filename = secure_filename(file.filename)
                     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                     file.save(filepath)
-                    extra_images.append(f'/static/images/{filename}')
+                    new_images.append(f'/static/images/{filename}')
 
-        images_str = json.dumps(extra_images) if extra_images else None
+        all_images = existing_images + new_images
+        images_str = json.dumps(all_images) if all_images else None
 
 
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
 
         query = '''
             UPDATE news
@@ -345,8 +359,8 @@ def update_news(news_id):
                 'UPDATE news SET news_cover_image = %s WHERE news_id = %s', (cover_image_url, news_id)
             )
 
-        if images_str:
-            cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
+        
+        cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
         
         connection.commit()
         cursor.close()
@@ -376,6 +390,47 @@ def delete_news(news_id):
         return jsonify({'message': 'la noticia se ha eliminado con éxito'}), 200
     except Exception as e:
         print('error in delete_news:', e)
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/delete_news_image/<int:news_id>', methods=['DELETE'])
+def delete_news_image(news_id):
+    try:
+        data = request.json
+        image_url = data.get('image_url')
+
+        if not image_url:
+            return jsonify({'error': 'no image url has been provided'}), 400
+        
+        connection = create_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute('SELECT news_images FROM news WHERE news_id = %s', (news_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({'error': 'no encuentro la noticia que estás buscando'}), 404
+        
+        images = []
+        if row['news_images']:
+            try:
+                images = json.loads(row['news_images'])
+            except:
+                images = []
+
+        if image_url in images:
+            images.remove(image_url)
+
+        images_str = json.dumps(images) if images else None
+
+        cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return jsonify({'message': 'Esta imagen ha sido eliminadacon éxito'}), 200
+    
+    except Exception as e:
+        print('error in delete_news_image:', e)
         return jsonify({'error': str(e)}), 500
     
 
@@ -457,52 +512,6 @@ def delete_user(id):
 
 
 
-@app.route('/create_news', methods=['POST'])
-def create_news():
-    if 'users_id' not in session:
-        return jsonify({'error': 'Acceso no autorizado'}), 401
-    
-    users_id = session['users_id']
-    title = request.form['title']
-    content = request.form['content']
-    category = request.form['category']
-    cover_image = None
-
-    if 'cover' in request.files:
-        file = request.files['cover']
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(filepath)
-        cover_image = f'/{filepath}'
-
-    cursor = connection.cursor()
-    cursor.execute("INSERT INTO news (news_users_id, news_title, news_content, news_category, news_cover_image) VALUES (%s, %s, %s, %s, %s)",
-                   (users_id, title, content, category, cover_image))
-
-    connection.commit()
-    return jsonify({'msg': 'La nueva noticia ha sido creada'})
-
-
-
-
-
-
-@app.route('/upload_news_image/<int:news_id>', methods=['POST'])
-def upload_news_image(news_id):
-    if 'users_id' not in session:
-        return jsonify({'error': 'Acceso no autorizado'}), 401
-    
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file'})
-    
-    file = request.files['file']
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-    file.save(filepath)
-    news_images = f'/{filepath}'
-
-    cursor = connection.cursor()
-    cursor.execute('INSERT INTO news_images (news_id, news_images) VALUES (%s, %s)', (news_id, news_images))
-    connection.commit()
-    return jsonify({'url': news_images})
 
 
 
@@ -510,20 +519,13 @@ def upload_news_image(news_id):
 
 
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'no file part'})
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'no selected file'})
-    
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-    file.save(filepath)
 
-    image_url = f'/{filepath}'
 
-    return jsonify({'url': image_url})
+
+
+
+
+
 
 
 
