@@ -31,6 +31,8 @@ def allowed_file(filename):
 
 
 app.secret_key = 'hudcfijefv4567'
+app.config['SESSION_COOKIE_SAMESITE'] = None
+app.config['SESSION_COOKIE_SECURE'] = False
 
 
 
@@ -68,7 +70,7 @@ def hello_world():
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.json
+    data = request.get_json()
     email = data.get('email')
     password = data.get('password')
 
@@ -76,7 +78,8 @@ def login():
     user = cursor.fetchone()
 
     if user:
-        session['user_id'] = user['users_id']
+        session['logged_in'] = True
+        session['email'] = user['users_email']
         return jsonify({"message": "Login exitoso", "user": user}), 200
     else:
         return jsonify({"message": "Credenciales incorrectas"}), 401
@@ -90,8 +93,9 @@ def login():
 
 @app.route('/check_session', methods=['GET'])
 def check_session():
-    if 'user_id' in session:
-        return jsonify({'logged_in': True, 'user_id': session['user_id']})
+    print('DEBUG session:', dict(session))
+    if session.get('logged_in'):
+        return jsonify({'logged_in': True, 'email': session.get('email')})
     return jsonify({'logged_in': False})
 
 
@@ -102,7 +106,7 @@ def check_session():
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    session.pop('user_id', None)
+    session.clear()
     return jsonify({'message': 'sesión cerrada'}), 200
 
 
@@ -226,8 +230,6 @@ def get_news_item(news_id):
                 news_item['news_images'] = []
         else:
             news_item['news_images'] = []
-
-        print("📦 noticia enviada:", news_item)
         
         return jsonify(news_item)
         
@@ -391,6 +393,8 @@ def delete_news(news_id):
     except Exception as e:
         print('error in delete_news:', e)
         return jsonify({'error': str(e)}), 500
+    
+
     
 @app.route('/delete_news_image/<int:news_id>', methods=['DELETE'])
 def delete_news_image(news_id):
