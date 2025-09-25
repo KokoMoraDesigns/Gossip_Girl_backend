@@ -80,9 +80,23 @@ def login():
     if user:
         session['logged_in'] = True
         session['email'] = user['users_email']
-        return jsonify({"message": "Login exitoso", "user": user}), 200
+        session['user_id'] = user['users_id']
+        return jsonify({
+            'logged_in': True,
+            'user': {
+                'id': user['users_id'],
+                'email': user['users_email'],
+                'name': user['users_name']
+            },
+            "message": "Login exitoso"
+        }), 200
+            
     else:
-        return jsonify({"message": "Credenciales incorrectas"}), 401
+        return jsonify({
+            'logged_in': False,
+            'user': None,
+            "message": "Credenciales incorrectas"
+        }), 401
     
 
 
@@ -95,8 +109,16 @@ def login():
 def check_session():
     print('DEBUG session:', dict(session))
     if session.get('logged_in'):
-        return jsonify({'logged_in': True, 'email': session.get('email')})
-    return jsonify({'logged_in': False})
+        return jsonify({
+            'logged_in': True, 
+            'email': session.get('email'),
+            'user_id': session.get('user_id')
+        }), 200
+    return jsonify({
+        'logged_in': False,
+        'email': None,
+        'user_id': None
+    }), 200
 
 
 
@@ -107,7 +129,10 @@ def check_session():
 @app.route('/logout', methods=['POST'])
 def logout():
     session.clear()
-    return jsonify({'message': 'sesión cerrada'}), 200
+    return jsonify({
+        'logged_in': False,
+        'message': 'sesión cerrada'
+    }), 200
 
 
 
