@@ -470,30 +470,6 @@ def delete_news_image(news_id):
 
 
 
-
-
-
-
-
-
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    name = data.get('users_name')
-    email = data.get('users_email')
-    password = data.get('users_password')
-
-    if not name or not email or not password:
-        return jsonify({"message": "Faltan datos"}), 400
-    
-    try:
-        cursor.execute("INSERT INTO users (users_name, users_email, users_password) VALUES (%s, %s, %s)", (name, password, email))
-        return jsonify({"message": "Usuario registrado con éxito"}), 201
-    except mysql.connector.Error as err:
-        return jsonify({"message": f"Error: {err}"}), 400
-
-
 @app.route('/api/users', methods=['GET'])
 def get_users():
     try:
@@ -504,42 +480,6 @@ def get_users():
     except Error as e:
         return jsonify({'error': str(e)})
     
-
-
-
-@app.route('/users', methods=['POST'])
-def add_user():
-    try:
-        user = request.json
-        cursor.execute('INSERT INTO users (name, password) VALUES (%s, %s)', (user['name'], user['password']))
-        connection.commit()
-        return jsonify({'id': cursor.lastrowid})
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-
-@app.route('/users/<int:id>', methods=['PUT'])
-def update_user(id):
-    try:
-        user = request.json
-        cursor.execute('UPDATE users SET name = %s, password = %s WHERE id = %s', (user['name'], user['password'], id))
-        connection.commit()
-        return 'User updated'
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-@app.route('/users/<int:id>', methods=['DELETE'])
-def delete_user(id):
-    try:
-        cursor.execute('DELETE FROM users WHERE id = %s', (id,))
-        connection.commit()
-        return 'User deleted'
-    except Error as e:
-        return jsonify({'error': str(e)})
-    
-
-
-
 
 
 
