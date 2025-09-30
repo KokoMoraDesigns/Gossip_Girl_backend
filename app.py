@@ -42,10 +42,11 @@ def create_connection():
     try:
         connection = mysql.connector.connect(
 
-            host='localhost',
-            user='root',
-            password='16abril2012',
-            database='Gossip_Girl_Content'
+            host=os.environ.get('MYSQLHOST', 'nozomi.proxy.rlwy.net'),
+            user=os.environ.get('MYSQLUSER', 'root'),
+            password=os.environ.get('MYSQLPASSWORD', 'npbCloEfIlWXtCbCJWvqVbNDjSFbmVBq'),
+            database=os.environ.get('MYSQLDATABASE', 'railway'),
+            port=int(os.environ.get('MYSQLPORT', 46727))
         )
 
         if connection.is_connected():
