@@ -13,7 +13,10 @@ app = Flask(__name__)
 CORS(
     app, 
     supports_credentials=True,
-    origins=['http://localhost:3001']
+    origins=[
+        'http://localhost:3001',
+        'https://gossip-girl-wine.vercel.app'
+    ]
 )
 
 
