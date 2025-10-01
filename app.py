@@ -38,6 +38,10 @@ app.config['SESSION_COOKIE_SECURE'] = True
 
 Session(app)
 
+
+# -------------------- HELPERS --------------------
+
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1) [1].lower() in ALLOWED_EXTENSIONS
 
@@ -60,6 +64,7 @@ def get_connection():
         return None
 
 
+# -------------------- MAIN ROUTES --------------------
 
 @app.route('/')
 def hello_world():
@@ -71,6 +76,7 @@ def health():
     return 'OK', 200
 
 
+# -------------------- AUTH ROUTES --------------------
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -118,19 +124,12 @@ def login():
 
 @app.route('/check_session', methods=['GET'])
 def check_session():
-    if session.get('logged_in'):
-        return jsonify({
-            'logged_in': True, 
-            'email': session.get('email'),
-            'user_id': session.get('user_id')
-        }), 200
+
     return jsonify({
-        'logged_in': False,
-        'email': None,
-        'user_id': None
+        'logged_in': session.get('logged_in', False), 
+        'email': session.get('email'),
+        'user_id': session.get('user_id')
     }), 200
-
-
 
 
 
@@ -147,7 +146,7 @@ def logout():
 
 
 
-
+# -------------------- NEWS CRUD ROUTES --------------------
 
 @app.route('/get_news', methods=['GET'])
 def get_news():
@@ -495,6 +494,7 @@ def delete_news_image(news_id):
 
 
 
+# -------------------- USERS ROUTE --------------------
 
 
 @app.route('/api/users', methods=['GET'])
@@ -517,7 +517,7 @@ def get_users():
         conn.close()
     
 
-
+# -------------------- RUN --------------------
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
