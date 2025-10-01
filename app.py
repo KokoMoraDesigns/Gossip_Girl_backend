@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, session
 import mysql.connector
 from mysql.connector import Error
 from flask_cors import CORS
+from flask_session import Session
 import os
 from werkzeug.utils import secure_filename
 import json
@@ -28,14 +29,17 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-app.secret_key = 'hudcfijefv4567'
+app.secret_key = os.environ.get('SECRET_KEY', 'hudcfijefv4567')
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = None
-app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SECURE'] = True
+
+Session(app)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1) [1].lower() in ALLOWED_EXTENSIONS
-
-
 
 
 def get_connection():
