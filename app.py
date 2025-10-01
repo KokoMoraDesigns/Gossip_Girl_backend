@@ -28,20 +28,18 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+app.secret_key = 'hudcfijefv4567'
+app.config['SESSION_COOKIE_SAMESITE'] = None
+app.config['SESSION_COOKIE_SECURE'] = False
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1) [1].lower() in ALLOWED_EXTENSIONS
 
 
 
-app.secret_key = 'hudcfijefv4567'
-app.config['SESSION_COOKIE_SAMESITE'] = None
-app.config['SESSION_COOKIE_SECURE'] = False
 
-
-
-
-def create_connection():
-    connection = None
+def get_connection():
+    
     try:
         connection = mysql.connector.connect(
 
@@ -51,24 +49,22 @@ def create_connection():
             database=os.environ.get('MYSQLDATABASE', 'railway'),
             port=int(os.environ.get('MYSQLPORT', 46727))
         )
-
-        if connection.is_connected():
-            print('Connected to MySQL')
+        return connection
     
     except Error as e:
-        print(f'Error: {e}')
-    
-    return connection
+        print(f'Error conectando a MySQL: {e}')
+        return None
 
-
-
-connection = create_connection()
-cursor = connection.cursor(dictionary=True)
 
 
 @app.route('/')
 def hello_world():
     return 'Te amo, mi Amatxito maravillosísima'
+
+
+@app.route('/health')
+def health():
+    return 'OK', 200
 
 
 
@@ -78,8 +74,20 @@ def login():
     email = data.get('email')
     password = data.get('password')
 
-    cursor.execute('SELECT * FROM users WHERE users_email=%s AND users_password=%s', (email, password))
-    user = cursor.fetchone()
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute('SELECT * FROM users WHERE users_email=%s AND users_password=%s', (email, password))
+        user = cursor.fetchone()
+    except Exception as e:
+        print("Error en login:", e)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
     if user:
         session['logged_in'] = True
@@ -94,24 +102,18 @@ def login():
             },
             "message": "Login exitoso"
         }), 200
-            
     else:
         return jsonify({
             'logged_in': False,
             'user': None,
             "message": "Credenciales incorrectas"
         }), 401
+
     
-
-
-
-
-
 
 
 @app.route('/check_session', methods=['GET'])
 def check_session():
-    print('DEBUG session:', dict(session))
     if session.get('logged_in'):
         return jsonify({
             'logged_in': True, 
@@ -146,10 +148,13 @@ def logout():
 @app.route('/get_news', methods=['GET'])
 def get_news():
 
-    try:
+    conn = get_connection()
 
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
+    try:
 
         query = """
             SELECT
@@ -167,8 +172,6 @@ def get_news():
         """
         cursor.execute(query)
         rows = cursor.fetchall()
-        cursor.close()
-        connection.close()
 
         for row in rows:
             if row['news_images']:
@@ -185,16 +188,22 @@ def get_news():
     except Exception as e:
         print('error in get_news:', e)
         return jsonify({'error': str(e)}), 500
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
 @app.route('/get_news/<category>', methods=['GET'])
 def get_news_by_category(category):
-    try:
 
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
-    
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
+    try:
         query = """
             SELECT 
                 news_id AS id,
@@ -212,8 +221,6 @@ def get_news_by_category(category):
         """
         cursor.execute(query, (category,))
         rows = cursor.fetchall()
-        cursor.close()
-        connection.close()
 
         for row in rows:
             if row['news_images']:
@@ -229,24 +236,25 @@ def get_news_by_category(category):
     except Exception as e:
         print('error in get_news_by_category:', e)
         return jsonify({'error': str(e)}), 500
-
-
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
 @app.route('/get_news/<int:news_id>', methods=['GET'])
 def get_news_item(news_id):
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
 
     try: 
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
     
         query = 'SELECT n.news_id AS id, n.news_title AS title, n.news_content AS content, n.news_cover_image AS cover_image, n.news_category AS category, n.created_at AS created_at, n.updated_at AS updated_at, n.news_images, u.users_name AS author FROM news n JOIN users u ON n.news_users_id = u.users_id WHERE n.news_id = %s'
         cursor.execute(query, (news_id,))
         news_item = cursor.fetchone()
-
-        cursor.close()
-        connection.close()
 
         if not news_item:
             return jsonify({'error': 'No encuentro la noticia que estás buscando'}), 404
@@ -266,45 +274,53 @@ def get_news_item(news_id):
     except Exception as e:
         print('error in get_news_item:', e)
         return jsonify({'error': str(e)}), 500
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
 @app.route('/add_news', methods=['POST'])
 def add_news():
-    try:
-        title = request.form.get('title')
-        content = request.form.get('content')
-        category = request.form.get('category')
-        user_id = request.form.get('user_id')
+    
+    title = request.form.get('title')
+    content = request.form.get('content')
+    category = request.form.get('category')
+    user_id = request.form.get('user_id')
 
 
-        cover_image_url = None
+    cover_image_url = None
 
-        if 'cover_image' in request.files:
-            file = request.files['cover_image']
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                cover_image_url = f'/static/images/{filename}'
+    if 'cover_image' in request.files:
+        file = request.files['cover_image']
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            cover_image_url = f'/static/images/{filename}'
 
 
 
             
-        extra_images = []
-        if 'news_images' in request.files:
-            files = request.files.getlist('news_images')
-            for file in files:
-                if file and allowed_file(file.filename):
-                    filename = secure_filename(file.filename)
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    file.save(filepath)
-                    extra_images.append(f'/static/images/{filename}')
+    extra_images = []
+    if 'news_images' in request.files:
+        files = request.files.getlist('news_images')
+        for file in files:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                extra_images.append(f'/static/images/{filename}')
 
-        images_str = json.dumps(extra_images) if extra_images else None
+    images_str = json.dumps(extra_images) if extra_images else None
 
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
+    try:
 
         query = '''
 
@@ -313,41 +329,45 @@ def add_news():
         '''
 
         cursor.execute(query, (title, content, cover_image_url, category, user_id, images_str))
-        connection.commit()
-
+        conn.commit()
         new_id = cursor.lastrowid
-
-        cursor.close()
-        connection.close()
 
         return jsonify({'message': 'la noticia ha sido creada con éxito', 'id': new_id }), 201
     
     except Exception as e:
         print('error in add_new:', e)
         return jsonify({'error': str(e)}), 500
+        
+    finally:
+        cursor.close()
+        conn.close()
     
 
 
 @app.route('/update_news/<int:news_id>', methods=['PUT'])
 def update_news(news_id):
+    title = request.form.get('title')
+    content = request.form.get('content')
+    category = request.form.get('category')
+
+    cover_image_url = None
+
+    if 'cover_image' in request.files:
+        file = request.files['cover_image']
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            cover_image_url = f'/static/images/{filename}'
+
+
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
     try:
 
-        title = request.form.get('title')
-        content = request.form.get('content')
-        category = request.form.get('category')
-
-        cover_image_url = None
-        if 'cover_image' in request.files:
-            file = request.files['cover_image']
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                cover_image_url = f'/static/images/{filename}'
-
-
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
         cursor.execute('SELECT news_images FROM news WHERE news_id = %s', (news_id,))
         row = cursor.fetchone()
 
@@ -374,68 +394,69 @@ def update_news(news_id):
 
 
 
-        query = '''
+        cursor.execute('''
             UPDATE news
-            SET news_title = %s,
-                news_content = %s,
-                news_category = %s,
-                updated_at = NOW()
-            WHERE news_id = %s
-        '''
-
-        cursor.execute(query, (title, content, category, news_id))
+            SET news_title=%s, news_content=%s, news_category=%s, updated_at=NOW()
+            WHERE news_id=%s
+        ''', (title, content, category, news_id))
 
         if cover_image_url:
-            cursor.execute(
-                'UPDATE news SET news_cover_image = %s WHERE news_id = %s', (cover_image_url, news_id)
-            )
-
-        
+            cursor.execute('UPDATE news SET news_cover_image = %s WHERE news_id = %s', (cover_image_url, news_id)) 
+    
         cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
         
-        connection.commit()
-        cursor.close()
-        connection.close()
+        conn.commit()
 
         return jsonify({'message': 'la noticia se ha actualizado exitosamente'}), 200
-    
+
     except Exception as e:
         print('error in update_news:', e)
         return jsonify({'error': str(e)}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
     
 
 
 @app.route('/delete_news/<int:news_id>', methods=['DELETE'])
 def delete_news(news_id):
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
     try:
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
 
-        query = 'DELETE FROM news WHERE news_id = %s'
-        cursor.execute(query, (news_id,))
-        connection.commit()
-
-        cursor.close()
-        connection.close()
-
+        cursor.execute('DELETE FROM news WHERE news_id = %s', (news_id,))
+        conn.commit()
         return jsonify({'message': 'la noticia se ha eliminado con éxito'}), 200
+
     except Exception as e:
         print('error in delete_news:', e)
         return jsonify({'error': str(e)}), 500
+    
+    finally:
+        cursor.close()
+        conn.close()
     
 
     
 @app.route('/delete_news_image/<int:news_id>', methods=['DELETE'])
 def delete_news_image(news_id):
-    try:
-        data = request.json
-        image_url = data.get('image_url')
+    
+    data = request.json
+    image_url = data.get('image_url')
 
-        if not image_url:
-            return jsonify({'error': 'no image url has been provided'}), 400
+    if not image_url:
+        return jsonify({'error': 'no image url has been provided'}), 400
         
-        connection = create_connection()
-        cursor = connection.cursor(dictionary=True)
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
+    try:
 
         cursor.execute('SELECT news_images FROM news WHERE news_id = %s', (news_id,))
         row = cursor.fetchone()
@@ -455,20 +476,18 @@ def delete_news_image(news_id):
         images_str = json.dumps(images) if images else None
 
         cursor.execute('UPDATE news SET news_images = %s WHERE news_id = %s', (images_str, news_id))
-        connection.commit()
+        conn.commit()
 
-        cursor.close()
-        connection.close()
-
-        return jsonify({'message': 'Esta imagen ha sido eliminadacon éxito'}), 200
+        return jsonify({'message': 'Esta imagen ha sido eliminada con éxito'}), 200
+    
     
     except Exception as e:
         print('error in delete_news_image:', e)
         return jsonify({'error': str(e)}), 500
     
-
-
-
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
@@ -476,6 +495,11 @@ def delete_news_image(news_id):
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
+    conn = get_connection()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos'}), 500
+    cursor = conn.cursor(dictionary=True)
+
     try:
         cursor.execute('SELECT * FROM users')
         users = cursor.fetchall()
@@ -484,19 +508,13 @@ def get_users():
     except Error as e:
         return jsonify({'error': str(e)})
     
+    finally:
+        cursor.close()
+        conn.close()
+    
 
 
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
-
-@app.teardown_appcontext
-def close_connection(exception):
-    if connection.is_connected():
-        cursor.close()
-        connection.close()
-        print('MySQL connection is closed')
