@@ -70,6 +70,10 @@ def get_connection():
 
 @app.route('/')
 def hello_world():
+    return 'Welcome to Gossip Girl Secret Backstage'
+
+@app.route('/mami_maravillosa')
+def hello_mami():
     return 'Te amo, mi Amatxito maravillosísima'
 
 
