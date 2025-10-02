@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, session
 import mysql.connector
 from mysql.connector import Error
 from flask_cors import CORS
-from flask_session import Session
 import os
 from werkzeug.utils import secure_filename
 import json
@@ -32,7 +31,6 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.secret_key = str(os.environ.get('SECRET_KEY', 'hudcfijefv4567'))
 
 app.config.update(
-    SESSION_TYPE = 'filesystem',
     SESSION_PERMANENT = False,
     SESSION_USE_SIGNER = True,
     SESSION_COOKIE_NAME= 'gg_session',
@@ -41,11 +39,6 @@ app.config.update(
 )
 
     
-
-
-
-Session(app)
-
 
 # -------------------- HELPERS --------------------
 
