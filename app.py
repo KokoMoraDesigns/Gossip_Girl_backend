@@ -29,12 +29,20 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-app.secret_key = os.environ.get('SECRET_KEY', 'hudcfijefv4567')
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = None
-app.config['SESSION_COOKIE_SECURE'] = True
+app.secret_key = str(os.environ.get('SECRET_KEY', 'hudcfijefv4567'))
+
+app.config.update(
+    SESSION_TYPE = 'filesystem',
+    SESSION_PERMANENT = False,
+    SESSION_USE_SIGNER = True,
+    SESSION_COOKIE_NAME= 'gg_session',
+    SESSION_COOKIE_SAMESITE = 'None',
+    SESSION_COOKIE_SECURE = True
+)
+
+    
+
+
 
 Session(app)
 
@@ -57,6 +65,7 @@ def get_connection():
             database=os.environ.get('MYSQLDATABASE', 'railway'),
             port=int(os.environ.get('MYSQLPORT', 46727))
         )
+        print('conexión a MySQL exitosa')
         return connection
     
     except Error as e:
@@ -83,6 +92,8 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
+    print("data received:", data)
+    print("email:", email, "password:", password)
 
     conn = get_connection()
     if not conn:
